@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Fechamento</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>Lista de Tarefas Fechamento</h2>
+            <form action="/adicionar" method="post">
+                <input type="text" name="descricao" placeholder="Nova Tarefa">
+                <input type="submit" value="Adicionar">
+                <button id="reiniciar-btn" class="btn-reiniciar" type="button">Reiniciar</button>
+            </form>
+        </div>
+
+        <div class="tarefas">
+            <ul>
+                {% for tarefa in tarefas %}
+                <li data-id="{{ tarefa.id }}" class="{{ 'concluida' if tarefa.concluido else 'nao-concluida' }}">
+                    <div class="tarefa-container">
+                        <div class="left-content">
+                            <input type="checkbox" class="tarefa-checkbox" {% if tarefa.concluido %}checked{% endif %} onclick="location.href='{{ url_for('toggle', id=tarefa.id) }}'">
+                            {% if tarefa.concluido %}
+                                <s>#{{ tarefa.order }} - {{ tarefa.descricao }}</s><br>
+                                {% if tarefa.start_time and tarefa.end_time %}
+                                    <small>Tempo decorrido: {{ (tarefa.end_time - tarefa.start_time).seconds // 60 }} minutos</small>
+                                {% endif %}
+                            {% else %}
+                                #{{ tarefa.order }} - {{ tarefa.descricao }}
+                            {% endif %}
+                        </div>
+                        <div class="botao-actions">
+                            <span class="start-time-display">
+                                {% if tarefa.start_time %}
+                                    Início: {{ tarefa.start_time.strftime('%H:%M') }}
+                                {% endif %}
+                            </span>
+                            {% if not tarefa.start_time %}
+                                <button class="botao-iniciar">Iniciar</button>
+                            {% endif %}
+                            <a href="{{ url_for('apagar', id=tarefa.id) }}" class="botao-apagar">Apagar</a>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('reiniciar-btn').addEventListener('click', function() {
+            var confirmation = confirm("Tem certeza que deseja reiniciar todas as tarefas?");
+            if (confirmation) {
+                $.ajax({
+                    url: '/reiniciar-tarefas',
+                    method: 'POST',
+                    success: function(response) {
+                        location.reload(); // Recarrega a página para ver as mudanças
+                    },
+                    error: function(error) {
+                        console.error("Erro ao reiniciar tarefas:", error);
+                    }
+                });
+            }
+        });
+
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            var el = document.querySelector('.tarefas ul');
+            
+            // Função de reordenação
+            Sortable.create(el, {
+                animation: 150,
+                onEnd: function() {
+                    var taskOrder = [];
+                    el.querySelectorAll('li').forEach(function(item) {
+                        taskOrder.push(item.getAttribute('data-id'));
+                    });
+                    $.ajax({
+                        url: "/update-order",
+                        method: "POST",
+                        contentType: "application/json",
+                        data: JSON.stringify({ order: taskOrder }),
+                        success: function(response) {
+                            location.reload();
+                        },
+                        error: function(error) {
+                            console.error("Erro ao atualizar ordem:", error);
+                        }
+                    });
+                }
+            });
+    
+            // Função para os botões "Iniciar"
+            var startButtons = document.querySelectorAll('.botao-iniciar');
+            startButtons.forEach(function(button) {
+                button.addEventListener('click', function(event) {
+                    event.preventDefault(); // previne o comportamento padrão do botão
+
+                    var currentTime = new Date();
+                    var timeString = currentTime.getHours().toString().padStart(2, '0') + ":" + currentTime.getMinutes().toString().padStart(2, '0');
+
+                    var parentLi = button.closest('li'); // Encontrar o elemento li mais próximo acima na árvore DOM
+                    var taskId = parentLi.getAttribute('data-id');
+
+                    var dataToSend = {
+                        taskId: taskId,
+                        startTime: timeString
+                    };
+
+                    // Enviando o tempo de início para o servidor
+                    $.ajax({
+                        url: "/start-task",
+                        method: "POST",
+                        contentType: "application/json",
+                        data: JSON.stringify(dataToSend),
+                        success: function(response) {
+                            button.previousElementSibling.textContent = timeString; // Atualiza o display de tempo
+                            button.style.display = 'none';  // Esconde o botão "Iniciar"
+                            location.reload(); // Recarrega a página para ver as mudanças
+                        },
+                        error: function(error) {
+                            console.error("Erro ao iniciar tarefa:", error);
+                        }
+                    });
+                });
+            });
+
+        });
+    </script>
+    
+</body>
+
+</html>
